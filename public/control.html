@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BadCast – Régie</title>
+<style>
+  :root { --bg: #14161a; --panel: #1f2329; --text: #e8eaed; --muted: #9aa0a6; --accent: #3b82f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.4 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  .pill { padding: 3px 10px; border-radius: 999px; background: #2b3038; color: var(--muted); font-size: 13px; }
+  .pill.ok { background: #14532d; color: #bbf7d0; }
+  .pill.ko { background: #7f1d1d; color: #fecaca; }
+  main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(260px, 1fr); gap: 16px; padding: 16px; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; } }
+  .preview { background: #000; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; border-radius: 8px; overflow: hidden; }
+  .preview img { max-width: 100%; max-height: 100%; }
+  .caption { color: var(--muted); margin: 8px 0 0; }
+  .panel { background: var(--panel); border-radius: 8px; padding: 16px; display: grid; gap: 14px; align-content: start; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button { background: #2b3038; color: var(--text); border: 0; border-radius: 6px; padding: 10px 14px; font: inherit; cursor: pointer; }
+  button:hover { background: #363c46; }
+  button.primary { background: var(--accent); color: #fff; }
+  input[type=number], input[type=text], select { background: #2b3038; color: var(--text); border: 1px solid #3a404a; border-radius: 6px; padding: 8px; font: inherit; }
+  input[type=number] { width: 80px; }
+  input[type=text] { flex: 1; min-width: 0; }
+  label { color: var(--muted); }
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; padding: 0 16px 24px; }
+  .thumb { background: #000; border: 3px solid transparent; border-radius: 6px; cursor: pointer; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
+  .thumb img { max-width: 100%; max-height: 100%; }
+  .thumb.current { border-color: var(--accent); }
+  .thumb span { position: absolute; left: 4px; bottom: 2px; font-size: 12px; color: #fff; text-shadow: 0 0 3px #000; }
+  code { background: #2b3038; padding: 2px 6px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BadCast – Régie</h1>
+  <span id="conn" class="pill">Connexion…</span>
+  <span id="screens" class="pill">0 écran</span>
+  <span class="pill">Adresse des écrans : <code id="url"></code></span>
+</header>
+
+<main>
+  <section>
+    <div class="preview"><img id="current" alt=""></div>
+    <p class="caption" id="caption">—</p>
+  </section>
+
+  <section class="panel">
+    <div class="row">
+      <button onclick="send('prev')">◀ Précédente</button>
+      <button id="play" class="primary" onclick="send('toggle')">⏸ Pause</button>
+      <button onclick="send('next')">Suivante ▶</button>
+    </div>
+    <div class="row">
+      <label for="interval">Durée par image (s)</label>
+      <input type="number" id="interval" min="1" max="3600">
+    </div>
+    <div class="row">
+      <label for="transition">Transition</label>
+      <select id="transition" onchange="send('transition', { transition: this.value })">
+        <option value="fade">Fondu</option>
+        <option value="none">Aucune</option>
+      </select>
+    </div>
+    <div class="row">
+      <input type="text" id="message" placeholder="Bandeau texte (ex : Match terrain 3 dans 5 min)">
+      <button onclick="send('message', { message: msgInput.value })">Afficher</button>
+      <button onclick="msgInput.value=''; send('message', { message: '' })">Effacer</button>
+    </div>
+    <div class="row">
+      <button onclick="send('rescan')">↻ Relire le dossier images</button>
+      <button onclick="send('reload')">Recharger les écrans</button>
+      <button onclick="window.open('/screen', '_blank')">Ouvrir un écran ici</button>
+    </div>
+    <p class="caption">Raccourcis : ← / → changer d'image, espace = pause/lecture.</p>
+  </section>
+</main>
+
+<div class="thumbs" id="thumbs"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const msgInput = $('message');
+  let last = null;
+
+  $('url').textContent = location.origin + '/screen';
+
+  async function send(action, extra = {}) {
+    const r = await fetch('/api/control', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...extra }),
+    });
+    if (!r.ok) alert((await r.json()).error);
+  }
+
+  $('interval').addEventListener('change', (e) => send('interval', { interval: e.target.value }));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'ArrowRight') send('next');
+    else if (e.key === 'ArrowLeft') send('prev');
+    else if (e.key === ' ') { e.preventDefault(); send('toggle'); }
+  });
+
+  function render(s) {
+    $('screens').textContent = s.screens + (s.screens > 1 ? ' écrans connectés' : ' écran connecté');
+    $('play').textContent = s.playing ? '⏸ Pause' : '▶ Lecture';
+    if (document.activeElement !== $('interval')) $('interval').value = s.interval;
+    $('transition').value = s.transition;
+    if (document.activeElement !== msgInput && !msgInput.value) msgInput.value = s.message;
+
+    if (!s.images.length) {
+      $('current').removeAttribute('src');
+      $('caption').textContent = 'Aucune image : déposez des fichiers dans le dossier « images » du PC maître.';
+    } else {
+      $('current').src = s.images[s.index];
+      $('caption').textContent = `${s.index + 1} / ${s.images.length} — ${s.names[s.index]}`;
+    }
+
+    // Vignettes : reconstruites seulement si la liste change
+    const thumbs = $('thumbs');
+    if (!last || last.images.join() !== s.images.join()) {
+      thumbs.innerHTML = '';
+      s.images.forEach((src, i) => {
+        const d = document.createElement('div');
+        d.className = 'thumb';
+        d.title = s.names[i];
+        d.onclick = () => send('goto', { index: i });
+        const img = document.createElement('img');
+        img.src = src; img.loading = 'lazy';
+        const n = document.createElement('span');
+        n.textContent = i + 1;
+        d.append(img, n);
+        thumbs.append(d);
+      });
+    }
+    [...thumbs.children].forEach((d, i) => d.classList.toggle('current', i === s.index));
+    last = s;
+  }
+
+  const es = new EventSource('/events?role=control');
+  es.onopen = () => { $('conn').textContent = 'Serveur connecté'; $('conn').className = 'pill ok'; };
+  es.onerror = () => { $('conn').textContent = 'Serveur injoignable'; $('conn').className = 'pill ko'; };
+  es.onmessage = (e) => render(JSON.parse(e.data));
+</script>
+</body>
+</html>
