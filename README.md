@@ -75,11 +75,32 @@ Si un écran perd le réseau, il se reconnecte seul et se recale sur l'image en 
 | `PORT`                   | `8080`      | Port HTTP                          |
 | `INTERVAL`               | `10`        | Durée par image au démarrage (s)   |
 | `IMAGES_DIR`             | `./images`  | Dossier des images                 |
+| `PRES_DIR`               | `./presentation` | Dossier des présentations HTML |
 
 Sous Windows : `set INTERVAL=8` avant `node server.js`.
 
 Côté écran : `/screen?fit=cover` remplit tout l'écran (recadrage) au lieu d'afficher
 l'image entière avec des bandes noires.
+
+## Diffuser une présentation remark.js / xaringan (compteur de matchs…)
+
+BadCast peut aussi synchroniser une présentation HTML **remark.js** (celle générée par
+xaringan depuis R) : on avance les diapos sur le PC maître, tous les écrans suivent.
+
+1. Copiez le fichier HTML **et ses ressources** (`style.css`, `img/`, `libs/`…) dans le dossier
+   `presentation/` du PC maître, en gardant la même arborescence.
+2. Sur le PC maître, ouvrez la présentation **en mode maître** : lien « ▶ » dans la régie, ou
+   `http://localhost:8080/pres/S.html?role=master`. Naviguez comme d'habitude (flèches, clic…).
+3. Sur les PC des écrans, rien à changer : la page `/screen` bascule automatiquement sur la
+   présentation et suit la diapo du maître. Un écran allumé en cours de route se recale tout seul.
+4. Bouton « Revenir au diaporama d'images » dans la régie pour repasser aux images.
+
+Le serveur ajoute lui-même le script de synchronisation à la page : le fichier HTML n'est pas
+modifié et peut être régénéré depuis R à tout moment (il suffit de recharger la page).
+
+**Gymnase sans Internet** : la présentation charge remark.js depuis `remarkjs.com`. Téléchargez
+<https://remarkjs.com/downloads/remark-latest.min.js> à l'avance et déposez-le dans
+`presentation/` : le serveur l'utilisera automatiquement à la place d'Internet.
 
 ## Piloter depuis votre propre page HTML
 

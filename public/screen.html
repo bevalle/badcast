@@ -77,6 +77,8 @@
   }
 
   function apply(s) {
+    // Une présentation est pilotée depuis le PC maître : l'écran bascule dessus
+    if (s.mode === 'deck' && s.deck) return location.replace(s.deck.url);
     document.body.classList.toggle('no-fade', s.transition === 'none');
     msg.textContent = s.message || '';
     msg.style.display = s.message ? 'block' : 'none';

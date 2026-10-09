@@ -32,6 +32,9 @@
   .thumb img { max-width: 100%; max-height: 100%; }
   .thumb.current { border-color: var(--accent); }
   .thumb span { position: absolute; left: 4px; bottom: 2px; font-size: 12px; color: #fff; text-shadow: 0 0 3px #000; }
+  .deckbox { border-top: 1px solid #3a404a; padding-top: 14px; display: grid; gap: 8px; }
+  .deckbox a { color: #93c5fd; }
+  .live { color: #bbf7d0; }
   code { background: #2b3038; padding: 2px 6px; border-radius: 4px; }
 </style>
 </head>
@@ -75,6 +78,11 @@
       <button onclick="send('rescan')">↻ Relire le dossier images</button>
       <button onclick="send('reload')">Recharger les écrans</button>
       <button onclick="window.open('/screen', '_blank')">Ouvrir un écran ici</button>
+    </div>
+    <div id="deckbox" class="deckbox">
+      <b>Présentations</b> <span id="deckmode" class="caption"></span>
+      <div id="decks" class="row"></div>
+      <button id="backimages" onclick="send('images')" hidden>Revenir au diaporama d'images</button>
     </div>
     <p class="caption">Raccourcis : ← / → changer d'image, espace = pause/lecture.</p>
   </section>
@@ -121,6 +129,15 @@
       $('current').src = s.images[s.index];
       $('caption').textContent = `${s.index + 1} / ${s.images.length} — ${s.names[s.index]}`;
     }
+
+    const deckMode = s.mode === 'deck' && s.deck;
+    $('backimages').hidden = !deckMode;
+    $('deckmode').innerHTML = deckMode
+      ? `<span class="live">● en direct : ${decodeURIComponent(s.deck.url.slice(6))}, diapo ${s.deck.slide + 1}</span>`
+      : '';
+    $('decks').innerHTML = s.decks.length
+      ? s.decks.map((u) => `<a href="${u}?role=master" target="_blank">▶ ${decodeURIComponent(u.slice(6))}</a>`).join(' ')
+      : '<span class="caption">Déposez vos fichiers HTML (remark/xaringan) dans le dossier « presentation ».</span>';
 
     // Vignettes : reconstruites seulement si la liste change
     const thumbs = $('thumbs');

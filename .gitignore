@@ -1,3 +1,5 @@
 images/*
 !images/.gitkeep
+presentation/*
+!presentation/.gitkeep
 node_modules/

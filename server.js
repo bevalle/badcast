@@ -8,6 +8,7 @@
 // Pages servies :
 //   /control  -> régie (PC maître)
 //   /screen   -> affichage plein écran (PC des écrans)
+//   /pres/... -> vos présentations HTML (remark/xaringan) synchronisées sur les écrans
 
 'use strict';
 
@@ -20,6 +21,8 @@ const PORT = Number(process.env.PORT) || 8080;
 const ROOT = __dirname;
 const IMAGES_DIR = path.resolve(process.env.IMAGES_DIR || path.join(ROOT, 'images'));
 const PUBLIC_DIR = path.join(ROOT, 'public');
+const PRES_DIR = path.resolve(process.env.PRES_DIR || path.join(ROOT, 'presentation'));
+const REMARK_CDN = /https?:\/\/remarkjs\.com\/downloads\/remark-latest\.min\.js/g;
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg', '.bmp']);
 
 const MIME = {
@@ -48,6 +51,8 @@ const state = {
   interval: Math.max(1, Number(process.env.INTERVAL) || 10), // secondes
   transition: 'fade', // 'fade' | 'none'
   message: '', // bandeau texte optionnel affiché sur tous les écrans
+  mode: 'images', // 'images' (diaporama du dossier images/) | 'deck' (présentation HTML)
+  deck: null, // { url, slide } : présentation pilotée depuis le PC maître
 };
 
 let timer = null;
@@ -74,6 +79,17 @@ function scanImages() {
   return changed;
 }
 
+function listDecks() {
+  try {
+    return fs.readdirSync(PRES_DIR, { withFileTypes: true })
+      .filter((d) => d.isFile() && /\.html?$/i.test(d.name))
+      .map((d) => '/pres/' + encodeURIComponent(d.name))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 function publicState() {
   const n = state.images.length;
   return {
@@ -85,6 +101,9 @@ function publicState() {
     interval: state.interval,
     transition: state.transition,
     message: state.message,
+    mode: state.mode,
+    deck: state.deck,
+    decks: listDecks(),
     serverTime: Date.now(),
     screens: [...clients.values()].filter((c) => c.role === 'screen').length,
   };
@@ -98,7 +117,7 @@ function broadcast() {
 function restartTimer() {
   clearInterval(timer);
   timer = null;
-  if (state.playing && state.images.length > 1) {
+  if (state.mode === 'images' && state.playing && state.images.length > 1) {
     timer = setInterval(() => go(state.index + 1, false), state.interval * 1000);
   }
 }
@@ -134,6 +153,16 @@ function handleControl(cmd) {
       state.message = String(cmd.message || '').slice(0, 300);
       broadcast();
       break;
+    case 'deck': { // envoyé par une présentation ouverte en mode maître (?role=master)
+      const url = String(cmd.url || '');
+      if (!url.startsWith('/pres/')) throw new Error('URL de présentation invalide');
+      state.mode = 'deck';
+      state.deck = { url, slide: Math.max(0, parseInt(cmd.slide, 10) || 0) };
+      restartTimer();
+      broadcast();
+      break;
+    }
+    case 'images': state.mode = 'images'; go(state.index); break;
     case 'rescan': scanImages(); go(state.index); break;
     case 'reload': // force le rechargement des pages écran
       for (const c of clients.values()) c.res.write('event: reload\ndata: {}\n\n');
@@ -163,6 +192,25 @@ function serveFile(res, file, cache) {
       'Cache-Control': cache ? 'public, max-age=3600' : 'no-cache',
     });
     fs.createReadStream(file).pipe(res);
+  });
+}
+
+// Sert une présentation HTML en y ajoutant le script de synchronisation
+function serveDeck(res, file) {
+  fs.readFile(file, 'utf8', (err, html) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Introuvable');
+    }
+    // remark.js en local si le fichier est présent (gymnase sans Internet)
+    if (fs.existsSync(path.join(PRES_DIR, 'remark-latest.min.js'))) {
+      html = html.replace(REMARK_CDN, '/pres/remark-latest.min.js');
+    }
+    const tag = '<script src="/badcast-sync.js"></script>\n';
+    const at = html.toLowerCase().lastIndexOf('</body>');
+    html = at >= 0 ? html.slice(0, at) + tag + html.slice(at) : html + tag;
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+    res.end(html);
   });
 }
 
@@ -233,6 +281,13 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname.startsWith('/pres/')) {
+    const file = safeJoin(PRES_DIR, pathname.slice('/pres/'.length));
+    if (!file) return res.writeHead(403), res.end();
+    if (/\.html?$/i.test(file)) return serveDeck(res, file);
+    return serveFile(res, file, false);
+  }
+
   if (pathname.startsWith('/images/')) {
     const file = safeJoin(IMAGES_DIR, pathname.slice('/images/'.length));
     return file ? serveFile(res, file, true) : (res.writeHead(403), res.end());
@@ -257,7 +312,9 @@ setInterval(() => {
   }
 }, 5000);
 
-if (!fs.existsSync(IMAGES_DIR)) fs.mkdirSync(IMAGES_DIR, { recursive: true });
+for (const dir of [IMAGES_DIR, PRES_DIR]) {
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
 scanImages();
 restartTimer();
 
@@ -269,10 +326,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('  BadCast démarré');
   console.log(`  Dossier images : ${IMAGES_DIR} (${state.images.length} image(s))`);
+  console.log(`  Présentations  : ${PRES_DIR} (${listDecks().length} fichier(s) HTML)`);
   console.log('');
   for (const ip of ips.length ? ips : ['localhost']) {
     console.log(`  Régie  (PC maître) : http://${ip}:${PORT}/control`);
     console.log(`  Écrans (autres PC) : http://${ip}:${PORT}/screen`);
+    for (const d of listDecks()) console.log(`  Présentation maître : http://${ip}:${PORT}${d}?role=master`);
     console.log('');
   }
 });
