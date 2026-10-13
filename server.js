@@ -225,7 +225,7 @@ function serveBuvette(res) {
     }
     const value = JSON.stringify(CLASSEMENT_URL).replace(/</g, '\\u003c');
     res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
-    res.end(html.replace('__CLASSEMENT_URL__', value));
+    res.end(html.replace('__CLASSEMENT_URL__', () => value));
   });
 }
 
