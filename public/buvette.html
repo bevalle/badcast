@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BadCast · Buvette</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; cursor: none; }
+  #wrap { display: flex; height: 100vh; }
+  iframe { border: 0; display: block; height: 100%; background: #000; }
+  /* À gauche : l'écran BadCast habituel (images ou présentation remark synchronisée) */
+  #left { flex: 1 1 auto; min-width: 0; }
+  /* À droite : le classement au format portrait (9:16), au plus 45 % de la largeur */
+  #right { flex: 0 0 auto; width: min(45vw, calc(100vh * 9 / 16)); }
+  #missing {
+    flex: 0 0 auto; width: min(45vw, calc(100vh * 9 / 16)); display: none;
+    align-items: center; justify-content: center; text-align: center; padding: 24px; box-sizing: border-box;
+    color: #ccc; font: 18px/1.5 system-ui, sans-serif; background: #111;
+  }
+  #missing code { color: #fff; }
+  /* Couche transparente : les clics dans les cadres n'atteignent pas cette page,
+     elle les capte pour passer la page entière en plein écran. */
+  #overlay { position: fixed; inset: 0; z-index: 10; }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <iframe id="left" title="Diaporama BadCast"></iframe>
+  <iframe id="right" title="Classement en direct"></iframe>
+  <div id="missing">
+    <p>Classement non configuré.<br>
+    Lancez le serveur avec <code>CLASSEMENT_URL=…</code><br>
+    ou ouvrez <code>/buvette?classement=…</code></p>
+  </div>
+</div>
+<div id="overlay"></div>
+
+<script>
+(() => {
+  // URL du classement : ?classement=… sinon variable CLASSEMENT_URL du serveur (injectée ici)
+  const CONFIG_URL = __CLASSEMENT_URL__;
+  const params = new URLSearchParams(location.search);
+  const rightUrl = params.get('classement') || CONFIG_URL;
+  // Page de gauche : /screen par défaut (ex : ?gauche=/screen?fit=cover)
+  const leftUrl = params.get('gauche') || '/screen';
+
+  const left = document.getElementById('left');
+  const right = document.getElementById('right');
+  left.src = leftUrl;
+
+  if (rightUrl) {
+    right.src = rightUrl;
+    // Filet de sécurité : si Internet a coupé au chargement, le cadre resterait vide.
+    // La page du classement se met à jour seule ; on la recharge entièrement toutes les 15 min.
+    setInterval(() => { right.src = rightUrl; }, 15 * 60 * 1000);
+  } else {
+    right.style.display = 'none';
+    document.getElementById('missing').style.display = 'flex';
+  }
+
+  // Plein écran au clic / à une touche (les navigateurs exigent une action utilisateur)
+  const fs = () => { if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {}); };
+  document.addEventListener('click', fs);
+  document.addEventListener('keydown', (e) => { if (e.key !== 'F11') fs(); });
+
+  // Empêche la mise en veille de l'écran (si supporté)
+  async function wake() {
+    try { await navigator.wakeLock?.request('screen'); } catch {}
+  }
+  wake();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); });
+})();
+</script>
+</body>
+</html>

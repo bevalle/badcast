@@ -9,6 +9,7 @@
 //   /control  -> régie (PC maître)
 //   /screen   -> affichage plein écran (PC des écrans)
 //   /pres/... -> vos présentations HTML (remark/xaringan) synchronisées sur les écrans
+//   /buvette  -> écran partagé : diaporama à gauche, classement en direct (CLASSEMENT_URL) à droite
 
 'use strict';
 
@@ -22,6 +23,7 @@ const ROOT = __dirname;
 const IMAGES_DIR = path.resolve(process.env.IMAGES_DIR || path.join(ROOT, 'images'));
 const PUBLIC_DIR = path.join(ROOT, 'public');
 const PRES_DIR = path.resolve(process.env.PRES_DIR || path.join(ROOT, 'presentation'));
+const CLASSEMENT_URL = (process.env.CLASSEMENT_URL || '').trim();
 const REMARK_CDN = /https?:\/\/remarkjs\.com\/downloads\/remark-latest\.min\.js/g;
 const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.avif', '.svg', '.bmp']);
 
@@ -214,6 +216,19 @@ function serveDeck(res, file) {
   });
 }
 
+// Page buvette : on y inscrit l'URL du classement (variable CLASSEMENT_URL)
+function serveBuvette(res) {
+  fs.readFile(path.join(PUBLIC_DIR, 'buvette.html'), 'utf8', (err, html) => {
+    if (err) {
+      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return res.end('Introuvable');
+    }
+    const value = JSON.stringify(CLASSEMENT_URL).replace(/</g, '\\u003c');
+    res.writeHead(200, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-cache' });
+    res.end(html.replace('__CLASSEMENT_URL__', value));
+  });
+}
+
 // Empêche de sortir du dossier autorisé (../)
 function safeJoin(base, rel) {
   const p = path.resolve(base, '.' + path.sep + rel);
@@ -293,6 +308,8 @@ const server = http.createServer((req, res) => {
     return file ? serveFile(res, file, true) : (res.writeHead(403), res.end());
   }
 
+  if (pathname === '/buvette' || pathname === '/buvette.html') return serveBuvette(res);
+
   const routes = { '/': 'index.html', '/control': 'control.html', '/screen': 'screen.html' };
   const file = safeJoin(PUBLIC_DIR, routes[pathname] || pathname.slice(1));
   return file ? serveFile(res, file, false) : (res.writeHead(403), res.end());
@@ -327,10 +344,12 @@ server.listen(PORT, '0.0.0.0', () => {
   console.log('  BadCast démarré');
   console.log(`  Dossier images : ${IMAGES_DIR} (${state.images.length} image(s))`);
   console.log(`  Présentations  : ${PRES_DIR} (${listDecks().length} fichier(s) HTML)`);
+  console.log(`  Classement     : ${CLASSEMENT_URL ? CLASSEMENT_URL.replace(/([?&]cle=)[^&]*/, '$1***') : 'non configuré (CLASSEMENT_URL)'}`);
   console.log('');
   for (const ip of ips.length ? ips : ['localhost']) {
     console.log(`  Régie  (PC maître) : http://${ip}:${PORT}/control`);
     console.log(`  Écrans (autres PC) : http://${ip}:${PORT}/screen`);
+    console.log(`  Écran buvette      : http://${ip}:${PORT}/buvette`);
     for (const d of listDecks()) console.log(`  Présentation maître : http://${ip}:${PORT}${d}?role=master`);
     console.log('');
   }

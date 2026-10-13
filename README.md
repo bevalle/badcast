@@ -76,6 +76,7 @@ Si un écran perd le réseau, il se reconnecte seul et se recale sur l'image en 
 | `INTERVAL`               | `10`        | Durée par image au démarrage (s)   |
 | `IMAGES_DIR`             | `./images`  | Dossier des images                 |
 | `PRES_DIR`               | `./presentation` | Dossier des présentations HTML |
+| `CLASSEMENT_URL`         | (vide)      | Page du classement affichée à droite de `/buvette` |
 
 Sous Windows : `set INTERVAL=8` avant `node server.js`.
 
@@ -101,6 +102,28 @@ modifié et peut être régénéré depuis R à tout moment (il suffit de rechar
 **Gymnase sans Internet** : la présentation charge remark.js depuis `remarkjs.com`. Téléchargez
 <https://remarkjs.com/downloads/remark-latest.min.js> à l'avance et déposez-le dans
 `presentation/` : le serveur l'utilisera automatiquement à la place d'Internet.
+
+## Écran de la buvette : diaporama + classement en direct
+
+`/buvette` partage l'écran en deux : à gauche l'écran BadCast habituel (images ou présentation
+remark, synchronisé comme les autres), à droite le podium en direct de Chaz' Au Trésor, au format
+portrait.
+
+1. Lancez le serveur avec l'adresse de la page podium (la journée et la clé sont dans l'URL) :
+
+   ```
+   CLASSEMENT_URL="https://<site-chazautresor>/ecran?jour=2026-10-17&cle=<ECRAN_KEY>" node server.js
+   ```
+
+   Sous Windows : `set CLASSEMENT_URL=https://…` avant `node server.js` (ou dans `start-server.bat`).
+   Pour le dimanche, changez simplement la date. On peut aussi passer l'adresse directement :
+   `/buvette?classement=<URL encodée>`.
+2. Sur le PC de la buvette, ouvrez `http://<IP-du-PC-maître>:8080/buvette`
+   (ou `PAGE=buvette` dans `start-screen.sh` / `set PAGE=buvette` dans `start-screen.bat`).
+
+Le PC de la buvette doit avoir **Internet** pour le classement (le diaporama, lui, reste en local).
+Si la connexion coupe, le dernier podium reste affiché ; la page est rechargée toutes les 15 min.
+`/buvette?gauche=/screen?fit=cover` change l'affichage de gauche.
 
 ## Piloter depuis votre propre page HTML
 
